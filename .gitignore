@@ -1,0 +1,37 @@
+# ===============================================
+# Android Studio / Gradle
+# ===============================================
+
+# Generated files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.iml
+
+# Build directories
+**/build/
+
+# Local configuration file (contains SDK path and other user-specific settings)
+local.properties
+
+# Gradle wrapper directory (the wrapper scripts download this content)
+gradle/
+.gradle/
+
+# Log files
+*.log
+
+# Keystore files (NEVER commit signing keys)
+*.jks
+*.keystore
+
+# IDE-specific files
+.idea/
+.DS_Store
+
+# Captures and heap dumps
+captures/
+*.hprof
+

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="8dp">
+
+    <!-- The log view will take all space above the controls at the bottom -->
+    <TextView
+        android:id="@+id/txtLog"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/bottom_controls"
+        android:scrollbars="vertical"
+        android:textAppearance="@style/TextAppearance.AppCompat.Small"
+        android:gravity="bottom" />
+
+    <!-- This container holds all the bottom controls and is aligned to the parent bottom -->
+    <LinearLayout
+        android:id="@+id/bottom_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_alignParentBottom="true"
+        android:gravity="center_horizontal">
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connect" />
+
+        <GridLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:columnCount="2">
+
+            <Button
+                android:id="@+id/btnXplus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="X+" />
+
+            <Button
+                android:id="@+id/btnXminus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="X-" />
+
+            <Button
+                android:id="@+id/btnYplus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Y+" />
+
+            <Button
+                android:id="@+id/btnYminus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Y-" />
+
+            <Button
+                android:id="@+id/btnZplus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Z+" />
+
+            <Button
+                android:id="@+id/btnZminus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Z-" />
+
+        </GridLayout>
+
+
+        <!-- This is now a TextView for displaying status -->
+        <TextView
+            android:id="@+id/txtStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Status: Disconnected"
+            android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+            android:gravity="center"
+            android:padding="8dp" />
+    </LinearLayout>
+
+</RelativeLayout>

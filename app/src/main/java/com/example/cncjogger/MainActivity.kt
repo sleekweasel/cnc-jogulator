@@ -12,6 +12,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
+import android.util.Log
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connectButton: Button
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val ACTION_USB_PERMISSION = "com.example.cncjogger.USB_PERMISSION"
     }
 
@@ -90,7 +92,15 @@ class MainActivity : AppCompatActivity() {
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            appendLog("Broadcast received, action: <${intent?.action}>")
+            appendLog("Broadcast received, action: <${intent?.action}>  <$intent>")
+            Log.d(TAG, "Broadcast received: $intent")
+            intent?.extras?.let {
+                for (key in it.keySet()) {
+                    appendLog("Extra: $key = ${it.get(key)}")
+                    Log.d(TAG, "Extra: $key = ${it.get(key)}")
+                }
+            } ?: appendLog("Intent has no extras.")
+
             if (ACTION_USB_PERMISSION != intent?.action) return
 
             synchronized(this) {
@@ -147,7 +157,7 @@ class MainActivity : AppCompatActivity() {
                         val text = String(buffer, 0, len, Charsets.US_ASCII)
                         runOnUiThread { appendLog(text.trim()) }
                     }
-                } catch (e: IOException) {
+                } catch (_: IOException) {
                     // This is an expected timeout, just continue the loop
                 } catch (e: Exception) {
                     if (port != null) { // Check if disconnection was unexpected

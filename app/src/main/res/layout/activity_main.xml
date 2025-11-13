@@ -2,7 +2,8 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="8dp">
+    android:padding="8dp"
+    android:fitsSystemWindows="true">
 
     <!-- The log view will take all space above the controls at the bottom -->
     <TextView
@@ -67,7 +68,7 @@
             <Button
                 android:id="@+id/btnZminus"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android.layout_height="wrap_content"
                 android:text="Z-" />
 
         </GridLayout>

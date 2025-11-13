@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -16,13 +17,15 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import java.io.IOException
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
     private lateinit var usbManager: UsbManager
     private var port: UsbSerialPort? = null
     private lateinit var logView: TextView
-    private lateinit var statusView: TextView // For the status display
+    private lateinit var statusView: TextView
+    private lateinit var connectButton: Button
 
     companion object {
         private const val ACTION_USB_PERMISSION = "com.example.cncjogger.USB_PERMISSION"
@@ -34,11 +37,12 @@ class MainActivity : AppCompatActivity() {
 
         usbManager = getSystemService(USB_SERVICE) as UsbManager
         logView = findViewById(R.id.txtLog)
-        statusView = findViewById(R.id.txtStatus) // Reference the new status TextView
+        statusView = findViewById(R.id.txtStatus)
+        connectButton = findViewById(R.id.btnConnect)
 
         logView.movementMethod = ScrollingMovementMethod()
 
-        findViewById<Button>(R.id.btnConnect).setOnClickListener { connectUsb() }
+        connectButton.setOnClickListener { toggleUsbConnection() }
 
         val jogs = mapOf(
             R.id.btnXplus to "G91\nG0 X1\nG90\n",
@@ -53,15 +57,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         registerUsbReceiver()
-        updateStatusDisplay() // Set initial status
+        updateStatusDisplay()
     }
 
-    private fun connectUsb() {
-        if (port != null) {
-            appendLog("Already connected. Disconnecting first.")
-            port?.close()
+    private fun toggleUsbConnection() {
+        if (port != null && port?.isOpen == true) {
+            appendLog("Disconnecting...")
+            try {
+                port?.close()
+            } catch (_: Exception) { /* Ignore */ }
             port = null
             updateStatusDisplay()
+            return
         }
 
         val devices = usbManager.deviceList
@@ -69,17 +76,21 @@ class MainActivity : AppCompatActivity() {
             appendLog("No USB devices detected.")
             return
         }
-        val device = devices.values.first()
-        appendLog("Found USB device: ${device.deviceName}")
 
+        val device = devices.values.first()
+        appendLog("Found USB device: $device / ${device.deviceName}. Requesting permission...")
+        val intent = Intent(ACTION_USB_PERMISSION).apply {
+            setPackage(packageName)
+        }
         val permissionIntent = PendingIntent.getBroadcast(
-            this, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE
+            this, 0, intent, PendingIntent.FLAG_IMMUTABLE
         )
         usbManager.requestPermission(device, permissionIntent)
     }
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            appendLog("Broadcast received, action: <${intent?.action}>")
             if (ACTION_USB_PERMISSION != intent?.action) return
 
             synchronized(this) {
@@ -99,10 +110,20 @@ class MainActivity : AppCompatActivity() {
                             runOnUiThread { appendLog("No ports found on device.") }
                             return@synchronized
                         }
-                        port?.open(connection)
-                        port?.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                        try {
+                            port?.open(connection)
+                            port?.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                        } catch (e: Exception) {
+                            runOnUiThread {
+                                appendLog("Error opening port: ${e.message}")
+                                port = null
+                                updateStatusDisplay()
+                            }
+                            return@synchronized
+                        }
+
                         runOnUiThread {
-                            appendLog("Connected to ${device.deviceName}")
+                            appendLog("Successfully connected to ${device.deviceName}")
                             updateStatusDisplay()
                         }
                         startReadLoop()
@@ -110,7 +131,7 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread { appendLog("No suitable driver found for device.") }
                     }
                 } else {
-                    runOnUiThread { appendLog("USB permission denied.") }
+                    runOnUiThread { appendLog("USB permission refused for $device ${device?.deviceName}.") }
                 }
             }
         }
@@ -119,19 +140,19 @@ class MainActivity : AppCompatActivity() {
     private fun startReadLoop() {
         thread(isDaemon = true) {
             val buffer = ByteArray(1024)
-            while (port != null) {
+            while (port != null && port?.isOpen == true) {
                 try {
                     val len = port?.read(buffer, 1000) ?: -1
                     if (len > 0) {
                         val text = String(buffer, 0, len, Charsets.US_ASCII)
-                        // TODO: Parse 'text' here to get X/Y/Z and update the status display
                         runOnUiThread { appendLog(text.trim()) }
                     }
+                } catch (e: IOException) {
+                    // This is an expected timeout, just continue the loop
                 } catch (e: Exception) {
                     if (port != null) { // Check if disconnection was unexpected
                         runOnUiThread {
-                            appendLog("Connection lost: ${e.message}")
-                            port?.close()
+                            appendLog("Connection lost: ${e.javaClass.simpleName}: ${e.message}")
                             port = null
                             updateStatusDisplay()
                         }
@@ -144,7 +165,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun sendCommand(cmd: String) {
         val currentPort = port
-        if (currentPort == null) {
+        if (currentPort == null || !currentPort.isOpen) {
             appendLog("Not connected. Cannot send command.")
             return
         }
@@ -159,12 +180,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatusDisplay() {
-        val statusText = if (port != null && port?.isOpen == true) {
-            "Status: Connected"
-        } else {
-            "Status: Disconnected"
+        runOnUiThread {
+            if (port != null && port?.isOpen == true) {
+                statusView.text = getString(R.string.status_connected)
+                connectButton.text = getString(R.string.disconnect)
+            } else {
+                statusView.text = getString(R.string.status_disconnected)
+                connectButton.text = getString(R.string.connect)
+            }
         }
-        runOnUiThread { statusView.text = statusText }
     }
 
     private fun appendLog(msg: String) {
@@ -179,6 +203,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             registerReceiver(usbReceiver, filter)
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // You can add a log here to see that this is called on orientation change
+        // appendLog("Configuration changed")
     }
 
     override fun onDestroy() {

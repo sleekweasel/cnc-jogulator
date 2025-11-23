@@ -96,7 +96,6 @@ class MainActivity : AppCompatActivity() {
             }
         }.toTypedArray()
 
-
         AlertDialog.Builder(this)
             .setTitle("Select a USB Device")
             .setItems(deviceList) { _, which ->
@@ -114,8 +113,16 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(ACTION_USB_PERMISSION).apply {
             setPackage(packageName)
         }
+        
+        // FLAG_MUTABLE is required for the system to add the permission extras to the intent
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        
         val permissionIntent = PendingIntent.getBroadcast(
-            this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            this, 0, intent, flags
         )
         usbManager.requestPermission(device, permissionIntent)
     }

@@ -11,8 +11,13 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
+import android.view.HapticFeedbackConstants
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -21,7 +26,10 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.io.IOException
+import java.util.Locale
 import kotlin.concurrent.thread
+import kotlin.math.cos
+import kotlin.math.sin
 
 class MainActivity : AppCompatActivity() {
     private lateinit var usbManager: UsbManager
@@ -30,6 +38,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logView: TextView
     private lateinit var statusView: TextView
     private lateinit var connectButton: Button
+    private lateinit var zeroButton: Button
+    private lateinit var joystick: JoystickView
+    private lateinit var vibrator: Vibrator
+
+    // Machine State
+    private var currentX = 0.0f
+    private var currentY = 0.0f
+    private var currentZ = 0.0f
+    private var currentS = 0
 
     companion object {
         private const val TAG = "MainActivity"
@@ -44,26 +61,86 @@ class MainActivity : AppCompatActivity() {
         logView = findViewById(R.id.txtLog)
         statusView = findViewById(R.id.txtStatus)
         connectButton = findViewById(R.id.btnConnect)
+        zeroButton = findViewById(R.id.btnZero)
+        joystick = findViewById(R.id.joystick)
+        
+        // Initialize Vibrator
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
 
         logView.movementMethod = ScrollingMovementMethod()
 
         connectButton.setOnClickListener { toggleUsbConnection() }
-
-        val jogs = mapOf(
-            R.id.btnXplus to "X1",
-            R.id.btnXminus to "X-1",
-            R.id.btnYplus to "Y1",
-            R.id.btnYminus to "Y-1",
-            R.id.btnZplus to "Z1",
-            R.id.btnZminus to "Z-1"
-        )
-        jogs.forEach { (id, partialCmd) ->
-            val cmd = "G91\nG0 $partialCmd\nG90\n"
-            findViewById<Button>(id).setOnClickListener { sendCommand(cmd) }
+        
+        zeroButton.setOnClickListener {
+            // Reset coordinate system to current position (Zero all axes)
+            val cmd = "G10 L20 P1 X0 Y0 Z0\n"
+            sendCommand(cmd)
+            
+            currentX = 0f
+            currentY = 0f
+            currentZ = 0f
+            updateStatusDisplay()
+            appendLog("Origin reset to current position")
         }
+
+        joystick.setOnJoystickMoveListener(object : JoystickView.OnJoystickMoveListener {
+            override fun onValueChanged(angle: Float, power: Float, direction: Int) {
+                if (power > 0.1f) {
+                    val rad = Math.toRadians(angle.toDouble())
+                    val x = (power * cos(rad)).toFloat()
+                    val y = -(power * sin(rad)).toFloat()
+                    
+                    currentX += x
+                    currentY += y
+                    updateStatusDisplay()
+
+                    val cmd = String.format(Locale.US, "G91\nG0 X%.2f Y%.2f\nG90\n", x, y)
+                    // sendCommand(cmd) 
+                }
+            }
+
+            override fun onJog(axis: String, step: Float) {
+                // Haptic feedback via Vibrator service
+                vibrate()
+                
+                // Visual flash
+                joystick.flash(axis)
+
+                if (axis == "S") {
+                    currentS = (currentS + step.toInt()).coerceIn(0, 10000)
+                    val cmd = "S$currentS\n"
+                    sendCommand(cmd)
+                } else {
+                    val cmd = String.format(Locale.US, "G91\nG0 %s%.2f\nG90\n", axis, step)
+                    sendCommand(cmd)
+                    
+                    when(axis) {
+                        "X" -> currentX += step
+                        "Y" -> currentY += step
+                        "Z" -> currentZ += step
+                    }
+                }
+                updateStatusDisplay()
+            }
+        })
 
         registerUsbReceiver()
         updateStatusDisplay()
+    }
+    
+    private fun vibrate() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(20)
+        }
     }
 
     private fun toggleUsbConnection() {
@@ -77,14 +154,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Find all available drivers from attached devices.
         val availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
         if (availableDrivers.isEmpty()) {
             appendLog("No supported USB devices detected.")
             return
         }
 
-        // Create a list of device names for the user to choose from
         val deviceList = availableDrivers.map { driver ->
             val device = driver.device
             val manu = device.manufacturerName
@@ -108,13 +183,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestUsbPermission(device: UsbDevice) {
         pendingDevice = device
-        // Create a PendingIntent for the permission request
         appendLog("Requesting permission for ${device.deviceName}...")
         val intent = Intent(ACTION_USB_PERMISSION).apply {
             setPackage(packageName)
         }
         
-        // FLAG_MUTABLE is required for the system to add the permission extras to the intent
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         } else {
@@ -155,7 +228,6 @@ class MainActivity : AppCompatActivity() {
                 pendingDevice = null
 
                 if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && device != null) {
-                    // Permission granted, connect to the device
                     val driver = UsbSerialProber.getDefaultProber().probeDevice(device)
                     if (driver != null) {
                         appendLog("USB driver: ${driver.javaClass.simpleName}, ${driver.ports.size} port(s)")
@@ -206,16 +278,16 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread { appendLog(text.trim()) }
                     }
                 } catch (_: IOException) {
-                    // This is an expected timeout, just continue the loop
+                    // Expected timeout
                 } catch (e: Exception) {
-                    if (port != null) { // Check if disconnection was unexpected
+                    if (port != null) { 
                         runOnUiThread {
                             appendLog("Connection lost: ${e.javaClass.simpleName}: ${e.message}")
                             port = null
                             updateStatusDisplay()
                         }
                     }
-                    break // Exit loop
+                    break 
                 }
             }
         }
@@ -224,7 +296,6 @@ class MainActivity : AppCompatActivity() {
     private fun sendCommand(cmd: String) {
         val currentPort = port
         if (currentPort == null || !currentPort.isOpen) {
-            appendLog("Not connected. Cannot send command.")
             return
         }
         try {
@@ -232,18 +303,27 @@ class MainActivity : AppCompatActivity() {
             appendLog("> ${cmd.trim()}")
         } catch (e: Exception) {
             appendLog("Write failed: ${e.message}")
-            port = null // Assume connection is dead
+            port = null 
             updateStatusDisplay()
         }
     }
 
     private fun updateStatusDisplay() {
         runOnUiThread {
+            val connectionStatus = if (port != null && port?.isOpen == true) {
+                getString(R.string.status_connected)
+            } else {
+                getString(R.string.status_disconnected)
+            }
+            
+            val statusText = String.format(Locale.US, "%s\nX:%.1f Y:%.1f Z:%.1f S:%d", 
+                connectionStatus, currentX, currentY, currentZ, currentS)
+            
+            statusView.text = statusText
+            
             if (port != null && port?.isOpen == true) {
-                statusView.text = getString(R.string.status_connected)
                 connectButton.text = getString(R.string.disconnect)
             } else {
-                statusView.text = getString(R.string.status_disconnected)
                 connectButton.text = getString(R.string.connect)
             }
         }
@@ -265,8 +345,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // You can add a log here to see that this is called on orientation change
-        // appendLog("Configuration changed")
     }
 
     override fun onDestroy() {
@@ -276,7 +354,6 @@ class MainActivity : AppCompatActivity() {
             port?.close()
             port = null
         } catch (_: Exception) {
-            // Ignore exceptions during cleanup
         }
     }
 }

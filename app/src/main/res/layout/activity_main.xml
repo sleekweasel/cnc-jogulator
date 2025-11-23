@@ -1,88 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="8dp"
-    android:fitsSystemWindows="true">
+    android:fillViewport="true"
+    android:fitsSystemWindows="true"
+    android:background="#111111">
 
-    <!-- The log view will take all space above the controls at the bottom -->
-    <TextView
-        android:id="@+id/txtLog"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@+id/bottom_controls"
-        android:scrollbars="vertical"
-        android:textAppearance="@style/TextAppearance.AppCompat.Small"
-        android:gravity="bottom" />
-
-    <!-- This container holds all the bottom controls and is aligned to the parent bottom -->
-    <LinearLayout
-        android:id="@+id/bottom_controls"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_alignParentBottom="true"
-        android:gravity="center_horizontal">
+        android:padding="16dp">
 
-        <Button
-            android:id="@+id/btnConnect"
-            android:layout_width="wrap_content"
+        <!-- Log View: Top section -->
+        <TextView
+            android:id="@+id/txtLog"
+            android:layout_width="0dp"
+            android:layout_height="100dp"
+            android:scrollbars="vertical"
+            android:textAppearance="@style/TextAppearance.AppCompat.Small"
+            android:gravity="bottom"
+            android:background="#000000"
+            android:textColor="#FFFF00"
+            android:typeface="monospace"
+            android:padding="4dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Control Buttons: Connect and Zero -->
+        <LinearLayout
+            android:id="@+id/controlButtons"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Connect" />
-
-        <GridLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:columnCount="2">
-
-            <Button
-                android:id="@+id/btnXplus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="X+" />
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="12dp"
+            app:layout_constraintTop_toBottomOf="@id/txtLog"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
             <Button
-                android:id="@+id/btnXminus"
+                android:id="@+id/btnConnect"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="X-" />
+                android:text="Connect"
+                android:layout_marginEnd="8dp"/>
 
             <Button
-                android:id="@+id/btnYplus"
+                android:id="@+id/btnZero"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Y+" />
+                android:text="Zero"
+                android:layout_marginStart="8dp"/>
+        </LinearLayout>
 
-            <Button
-                android:id="@+id/btnYminus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Y-" />
-
-            <Button
-                android:id="@+id/btnZplus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Z+" />
-
-            <Button
-                android:id="@+id/btnZminus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Z-" />
-
-        </GridLayout>
-
-
-        <!-- This is now a TextView for displaying status -->
+        <!-- Status View: Middle -->
         <TextView
             android:id="@+id/txtStatus"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:text="Status: Disconnected"
-            android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+            android:textColor="#AAAAAA"
+            android:textSize="16sp"
             android:gravity="center"
-            android:padding="8dp" />
-    </LinearLayout>
+            android:padding="8dp"
+            app:layout_constraintTop_toBottomOf="@id/controlButtons"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-</RelativeLayout>
+        <!-- Joystick View: Takes up remaining space -->
+        <com.example.cncjogger.JoystickView
+            android:id="@+id/joystick"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"
+            app:layout_constraintTop_toBottomOf="@id/txtStatus"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintVertical_bias="0.0" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

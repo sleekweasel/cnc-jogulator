@@ -15,7 +15,9 @@ import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.io.IOException
@@ -24,6 +26,7 @@ import kotlin.concurrent.thread
 class MainActivity : AppCompatActivity() {
     private lateinit var usbManager: UsbManager
     private var port: UsbSerialPort? = null
+    private var pendingDevice: UsbDevice? = null
     private lateinit var logView: TextView
     private lateinit var statusView: TextView
     private lateinit var connectButton: Button
@@ -47,14 +50,15 @@ class MainActivity : AppCompatActivity() {
         connectButton.setOnClickListener { toggleUsbConnection() }
 
         val jogs = mapOf(
-            R.id.btnXplus to "G91\nG0 X1\nG90\n",
-            R.id.btnXminus to "G91\nG0 X-1\nG90\n",
-            R.id.btnYplus to "G91\nG0 Y1\nG90\n",
-            R.id.btnYminus to "G91\nG0 Y-1\nG90\n",
-            R.id.btnZplus to "G91\nG0 Z1\nG90\n",
-            R.id.btnZminus to "G91\nG0 Z-1\nG90\n"
+            R.id.btnXplus to "X1",
+            R.id.btnXminus to "X-1",
+            R.id.btnYplus to "Y1",
+            R.id.btnYminus to "Y-1",
+            R.id.btnZplus to "Z1",
+            R.id.btnZminus to "Z-1"
         )
-        jogs.forEach { (id, cmd) ->
+        jogs.forEach { (id, partialCmd) ->
+            val cmd = "G91\nG0 $partialCmd\nG90\n"
             findViewById<Button>(id).setOnClickListener { sendCommand(cmd) }
         }
 
@@ -73,19 +77,45 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val devices = usbManager.deviceList
-        if (devices.isEmpty()) {
-            appendLog("No USB devices detected.")
+        // Find all available drivers from attached devices.
+        val availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        if (availableDrivers.isEmpty()) {
+            appendLog("No supported USB devices detected.")
             return
         }
 
-        val device = devices.values.first()
-        appendLog("Found USB device: $device / ${device.deviceName}. Requesting permission...")
+        // Create a list of device names for the user to choose from
+        val deviceList = availableDrivers.map { driver ->
+            val device = driver.device
+            val manu = device.manufacturerName
+            val prod = device.productName
+            if (manu == null || prod == null) {
+                "VID:${device.vendorId} PID:${device.productId}"
+            } else {
+                "$manu $prod"
+            }
+        }.toTypedArray()
+
+
+        AlertDialog.Builder(this)
+            .setTitle("Select a USB Device")
+            .setItems(deviceList) { _, which ->
+                val driver = availableDrivers[which]
+                requestUsbPermission(driver.device)
+            }
+            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun requestUsbPermission(device: UsbDevice) {
+        pendingDevice = device
+        // Create a PendingIntent for the permission request
+        appendLog("Requesting permission for ${device.deviceName}...")
         val intent = Intent(ACTION_USB_PERMISSION).apply {
             setPackage(packageName)
         }
         val permissionIntent = PendingIntent.getBroadcast(
-            this, 0, intent, PendingIntent.FLAG_IMMUTABLE
+            this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         usbManager.requestPermission(device, permissionIntent)
     }
@@ -104,16 +134,27 @@ class MainActivity : AppCompatActivity() {
             if (ACTION_USB_PERMISSION != intent?.action) return
 
             synchronized(this) {
-                val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                var device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
                 } else {
                     @Suppress("DEPRECATION")
                     intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
                 }
 
+                if (device == null) {
+                    device = pendingDevice
+                    appendLog("Device from intent is null, using pendingDevice: $device")
+                }
+                pendingDevice = null
+
                 if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && device != null) {
+                    // Permission granted, connect to the device
                     val driver = UsbSerialProber.getDefaultProber().probeDevice(device)
                     if (driver != null) {
+                        appendLog("USB driver: ${driver.javaClass.simpleName}, ${driver.ports.size} port(s)")
+                        driver.ports.forEachIndexed { index, p ->
+                            appendLog("  Port $index: $p")
+                        }
                         val connection = usbManager.openDevice(driver.device)
                         port = driver.ports.firstOrNull()
                         if (port == null) {

@@ -2,9 +2,8 @@
 
 <img src="./screenshot.jpg" align="right" alt="Screenshot" width="320"/>
 
-Drag clockwise or anticlockwise from x, y, z, or s to jog it forward or backward, 
-drag faster for coarse control and slower for fine control. Use the joystick in the
-middle for x-y dragging.
+Drag clockwise or anticlockwise from x, y, z, or s (spindle speed) to jog that axis forward or backward, 
+drag faster for coarse control and slower for fine control. Use the joystick in the middle for x-y dragging.
 
 Jog-dial works, spindle probably works, but I've disconnected mine while I play with using it as a plotter.
 
